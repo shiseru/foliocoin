@@ -14,6 +14,7 @@ class Blockchain:
         self.chain = []
         self.transactions = []
         self.create_block(proof = 1, previous_hash = '0')
+        self.nodes = set()
 
     def create_block(self, proof, previous_hash):
         """
@@ -107,8 +108,38 @@ class Blockchain:
 
         return previous_block['index'] + 1
 
+    def add_node(self, address):
+        parsed_url = urlparse(address)
+        self.nodes.add(parsed_url.netloc)
+
+    def replace_chain(self):
+        network = self.nodes
+        longest_chain = None
+        max_length = len(self.chain)
+
+        for nodes in network:
+            response = requests.get(f'http://{node}/get_chain')
+
+            if response.status_code == 200:
+                length = response.json()['length']
+                chain = response.json()['chain']
+
+                if length > max_length and self.is_chain_valid(chain):
+                    max_length = length
+                    longest_chain = chain
+
+        if longest_chain:
+            self.chain = chain
+            return True
+
+        return False
+
+
 
 app = Flask(__name__)
+
+# address of node at port 5000
+node_address = str(uuid4()).replace('-', '')
 
 blockchain = Blockchain()
 
@@ -122,6 +153,7 @@ def mine_block():
     previous_proof = previous_block['proof']
     proof = blockchain.proof_of_work(previous_proof)
     previous_hash = blockchain.hash(previous_block)
+    blockchain.add_transaction(sender = node_address, receiver = 'me', amount = 1)
 
     block = blockchain.create_block(proof, previous_hash)
 
@@ -130,7 +162,8 @@ def mine_block():
         'index' : block['index'],
         'timestamp' : block['timestamp'],
         'proof' : block['proof'],
-        'previous_hash' : block['previous_hash']
+        'previous_hash' : block['previous_hash'],
+        'transactions' : block['transactions']
     }
 
     return jsonify(response), 200
